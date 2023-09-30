@@ -1,8 +1,10 @@
 package pavise.producer
 
+import pavise.Cluster
+
 trait Partitioner[F[_], K]:
 
-  def partition(topic: String, key: K): F[Int]
+  def partition(topic: String, key: K, cluster: Cluster): F[Int]
 
 object Partitioner:
   

@@ -13,8 +13,6 @@ object KafkaClient:
       clientId: String,
       bootstrapServers: List[IpAddress],
       requestTimeout: FiniteDuration,
-      metadataMaxAge: FiniteDuration,
-      metadataMaxIdle: FiniteDuration,
       connectionsMaxIdle: FiniteDuration,
       reconnectBackoff: FiniteDuration,
       reconnectBackoffMax: FiniteDuration,

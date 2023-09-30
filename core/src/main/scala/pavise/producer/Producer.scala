@@ -3,16 +3,16 @@ package pavise.producer
 import cats.syntax.all.*
 import cats.effect.kernel.Resource
 import pavise.KafkaClient
-import pavise.producer.internal.RecordAccumulator
+import pavise.producer.internal.BatchSender
 import cats.effect.kernel.Async
 import com.comcast.ip4s.IpAddress
+import pavise.Metadata
+import pavise.producer.internal.RecordBatcher
 
 trait Producer[F[_], K, V]:
-
   def produce(record: ProducerRecord[K, V]): F[F[RecordMetadata]]
 
 object Producer:
-
   def resource[F[_]: Async, K, V](
       settings: ProducerSettings[F, K, V]
   ): Resource[F, Producer[F, K, V]] = for
@@ -25,30 +25,40 @@ object Producer:
       settings.clientId,
       bootstrapServers,
       settings.requestTimeout,
-      settings.metadataMaxAge,
-      settings.metadataMaxIdle,
       settings.connectionsMaxIdle,
       settings.reconnectBackoff,
       settings.reconnectBackoffMax,
       settings.socketConnectionSetupTimeout,
       settings.socketConnectionSetupTimeoutMax
     )
+    metadata <- Resource.eval(
+      Metadata.create(settings.metadataMaxAge, settings.metadataMaxIdle, client)
+    )
     keySerializer <- settings.keySerializer
     valueSerializer <- settings.valueSerializer
-    recordAccumulator <- Resource.eval(
-      RecordAccumulator.create[F, K, V](
-        settings.batchSize,
-        settings.compressionType,
-        settings.linger,
-        settings.retryBackOff,
-        settings.deliveryTimeout,
-        settings.maxBlockTime,
-        settings.bufferMemory,
-        client
-      )
+    batchSender <- BatchSender.resource[F](
+      settings.retryBackOff,
+      settings.deliveryTimeout,
+      settings.maxBlockTime,
+      metadata,
+      client
+    )
+    recordBatcher <- RecordBatcher.resource[F, K, V](
+      settings.batchSize,
+      settings.compressionType,
+      settings.linger,
+      settings.maxBlockTime,
+      settings.bufferMemory,
+      batchSender
     )
   yield new Producer[F, K, V]:
-    def produce(record: ProducerRecord[K, V]): F[F[RecordMetadata]] =
-      settings.partitioner.partition(record.topic, record.key).flatMap { partition =>
-        recordAccumulator.send(record, partition)
+    def produce(record: ProducerRecord[K, V]): F[F[RecordMetadata]] = for
+      cluster <- metadata.cluster.flatMap {
+        cluster => // TODO: add option to fetch all cluster topics at once
+          cluster.partitionsByTopic.get(record.topic) match
+            case Some(_) => cluster.pure[F]
+            case None => metadata.addTopic(record.topic).flatten
       }
+      partition <- settings.partitioner.partition(record.topic, record.key, cluster)
+      recordMetadataF <- recordBatcher.batch(record, partition)
+    yield recordMetadataF
