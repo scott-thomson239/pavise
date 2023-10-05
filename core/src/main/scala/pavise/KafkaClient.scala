@@ -6,7 +6,7 @@ import pavise.protocol.KafkaRequest
 import com.comcast.ip4s.IpAddress
 
 trait KafkaClient[F[_]]:
-  def sendRequest(nodeId: Int, request: KafkaRequest): F[F[request.RespT]]
+  def sendRequest(node: Node, request: KafkaRequest): F[F[request.RespT]]
 
 object KafkaClient:
   def resource[F[_]](

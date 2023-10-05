@@ -3,8 +3,7 @@ package pavise
 import scala.concurrent.duration.FiniteDuration
 
 trait Metadata[F[_]]:
-  def cluster: F[Cluster]
-  def addTopic(topic: String): F[F[Cluster]]
+  def currentLeader(topicPartition: TopicPartition): F[Node]
 
 object Metadata:
   def create[F[_]](

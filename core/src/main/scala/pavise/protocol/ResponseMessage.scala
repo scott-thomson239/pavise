@@ -5,8 +5,7 @@ import scodec.codecs.*
 
 case class ResponseMessage(correlationId: Int, response: KafkaResponse)
 
-trait KafkaResponse:
-  val apiKey: Int
+trait KafkaResponse
 
 object ResponseMessage:
 

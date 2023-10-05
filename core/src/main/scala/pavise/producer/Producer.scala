@@ -52,13 +52,7 @@ object Producer:
       batchSender
     )
   yield new Producer[F, K, V]:
-    def produce(record: ProducerRecord[K, V]): F[F[RecordMetadata]] = for
-      cluster <- metadata.cluster.flatMap {
-        cluster => // TODO: add option to fetch all cluster topics at once
-          cluster.partitionsByTopic.get(record.topic) match
-            case Some(_) => cluster.pure[F]
-            case None => metadata.addTopic(record.topic).flatten
-      }
-      partition <- settings.partitioner.partition(record.topic, record.key, cluster)
+    def produce(record: ProducerRecord[K, V]): F[F[RecordMetadata]] = for // TODO: add option to fetch all cluster topics at once
+      partition <- settings.partitioner.partition(record.topic, record.key, metadata)
       recordMetadataF <- recordBatcher.batch(record, partition)
     yield recordMetadataF
