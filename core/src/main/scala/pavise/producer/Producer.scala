@@ -8,12 +8,13 @@ import cats.effect.kernel.Async
 import com.comcast.ip4s.IpAddress
 import pavise.Metadata
 import pavise.producer.internal.RecordBatcher
+import fs2.io.net.Network
 
 trait Producer[F[_], K, V]:
   def produce(record: ProducerRecord[K, V]): F[F[RecordMetadata]]
 
 object Producer:
-  def resource[F[_]: Async, K, V](
+  def resource[F[_]: Async: Network, K, V](
       settings: ProducerSettings[F, K, V]
   ): Resource[F, Producer[F, K, V]] = for
     bootstrapServers <- Resource.eval[F, List[IpAddress]](
@@ -37,6 +38,7 @@ object Producer:
     keySerializer <- settings.keySerializer
     valueSerializer <- settings.valueSerializer
     batchSender <- BatchSender.resource[F](
+      settings.maxInFlightRequestsPerConnection,
       settings.retryBackOff,
       settings.deliveryTimeout,
       settings.maxBlockTime,
