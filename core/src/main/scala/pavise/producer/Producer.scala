@@ -32,9 +32,7 @@ object Producer:
       settings.socketConnectionSetupTimeout,
       settings.socketConnectionSetupTimeoutMax
     )
-    metadata <- Resource.eval(
-      Metadata.create(settings.metadataMaxAge, settings.metadataMaxIdle, client)
-    )
+    metadata <- Metadata.resource(settings.metadataMaxAge, settings.metadataMaxIdle, client)
     keySerializer <- settings.keySerializer
     valueSerializer <- settings.valueSerializer
     batchSender <- BatchSender.resource[F](
@@ -54,7 +52,8 @@ object Producer:
       batchSender
     )
   yield new Producer[F, K, V]:
-    def produce(record: ProducerRecord[K, V]): F[F[RecordMetadata]] = for // TODO: add option to fetch all cluster topics at once
-      partition <- settings.partitioner.partition(record.topic, record.key, metadata)
-      recordMetadataF <- recordBatcher.batch(record, partition)
-    yield recordMetadataF
+    def produce(record: ProducerRecord[K, V]): F[F[RecordMetadata]] =
+      for // TODO: add option to fetch all cluster topics at once
+        partition <- settings.partitioner.partition(record.topic, record.key, metadata)
+        recordMetadataF <- recordBatcher.batch(record, partition)
+      yield recordMetadataF

@@ -18,20 +18,18 @@ case class ProduceRequest(
     acks: Acks,
     timeoutMs: FiniteDuration,
     topicData: List[ProduceRequest.TopicData]
-) extends KafkaRequest {
+) extends KafkaRequest:
   type RespT = ProduceResponse
-}
 
-object ProduceRequest {
+object ProduceRequest:
 
   given codec(using apiVersions: ApiVersions): Codec[ProduceRequest] =
-    apiVersions.syncGroup match {
-      case _ => { // 8
+    apiVersions.syncGroup match
+      case _ => // 8
         val partitionData = (int32 :: bytes).as[PartitionData]
         val topicData = (utf8 :: list(partitionData)).as[TopicData]
-        (HelperCodecs.nullableString :: acksCodec :: HelperCodecs.ms :: list(topicData)).as[ProduceRequest]
-      }
-    }
+        (HelperCodecs.nullableString :: acksCodec :: HelperCodecs.ms :: list(topicData))
+          .as[ProduceRequest]
 
   case class TopicData(name: String, partitionData: List[PartitionData])
 
@@ -39,16 +37,12 @@ object ProduceRequest {
 
   val acksCodec: Codec[Acks] = uint16.exmap(fromRaw, toRaw)
 
-  def toRaw(acks: Acks): Attempt[Int] = acks match {
+  def toRaw(acks: Acks): Attempt[Int] = acks match
     case Acks.Zero => successful(0)
     case Acks.One => successful(1)
     case Acks.All => successful(-1)
-  }
 
-  def fromRaw(acks: Int): Attempt[Acks] = acks match {
+  def fromRaw(acks: Int): Attempt[Acks] = acks match
     case 0 => successful(Acks.Zero)
     case 1 => successful(Acks.One)
     case -1 => successful(Acks.All)
-  }
-
-}

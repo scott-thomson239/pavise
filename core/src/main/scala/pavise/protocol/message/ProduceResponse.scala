@@ -11,13 +11,12 @@ import pavise.protocol.ApiVersions
 case class ProduceResponse(
     responses: List[ProduceResponse.Response],
     throttleTimeMs: FiniteDuration
-) extends KafkaResponse 
+) extends KafkaResponse
 
-
-object ProduceResponse {
+object ProduceResponse:
 
   given codec(using apiVersions: ApiVersions): Codec[ProduceResponse] =
-    apiVersions.syncGroup match {
+    apiVersions.syncGroup match
       case _ => // 8
         val recordError = (int32 :: HelperCodecs.nullableString).as[RecordError]
         val partitionResponse =
@@ -26,7 +25,6 @@ object ProduceResponse {
           ) :: HelperCodecs.nullableString).as[PartitionResponse]
         val response = (utf8 :: list(partitionResponse)).as[Response]
         (list(response) :: HelperCodecs.ms).as[ProduceResponse]
-    }
 
   case class Response(
       name: String,
@@ -47,5 +45,3 @@ object ProduceResponse {
       batchIndex: Int,
       batchIndexErrorMessage: Option[String]
   )
-
-}

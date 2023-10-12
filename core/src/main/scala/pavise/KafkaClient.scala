@@ -14,6 +14,7 @@ import pavise.protocol.RequestMessage
 
 trait KafkaClient[F[_]]:
   def sendRequest(node: Node, request: KafkaRequest): F[F[request.RespT]]
+  def leastUsedNode: F[Node]
 
 object KafkaClient:
   def resource[F[_]: Async: Network](
@@ -44,4 +45,6 @@ object KafkaClient:
                   case _ =>
                     Async[F].raiseError[request.RespT](new Exception("wrong response type"))
               })
+
+          def leastUsedNode: F[Node] = ???
       }
