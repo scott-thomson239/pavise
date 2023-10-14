@@ -37,7 +37,7 @@ object BatchSender:
       .map { keyResStream =>
         new BatchSender[F]:
           def send(topicPartition: TopicPartition, batch: ByteVector): F[F[RecordMetadata]] =
-            metadata.currentLeader(topicPartition).flatMap { leader =>
+            metadata.currentLeader(topicPartition).flatMap { leaderId =>
               val pipe
                   : Pipe[F, (TopicPartition, ByteVector), (TopicPartition, RecordMetadata)] =
                 in =>
@@ -46,7 +46,7 @@ object BatchSender:
                     .flatMap { sem =>
                       in.chunks
                         .map[ProduceRequest](???)
-                        .evalMap(req => sem.acquire *> client.sendRequest(leader, req))
+                        .evalMap(req => sem.acquire *> client.sendRequest(leaderId, req))
                         .parEvalMapUnbounded(respF => respF <* sem.release) //retry here
                         .flatMap { resp =>
                           Stream.emits(resp.responses.flatMap { r =>
@@ -56,6 +56,6 @@ object BatchSender:
                           })
                         }
                     }
-              keyResStream.sendTo(leader.id, topicPartition, (topicPartition, batch), pipe)
+              keyResStream.sendTo(leaderId, topicPartition, (topicPartition, batch), pipe)
             }
       }

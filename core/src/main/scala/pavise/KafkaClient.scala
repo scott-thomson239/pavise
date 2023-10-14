@@ -11,13 +11,17 @@ import fs2.*
 import cats.syntax.all.*
 import pavise.protocol.ResponseMessage
 import pavise.protocol.RequestMessage
+import cats.effect.std.MapRef
+import com.comcast.ip4s.*
 
 trait KafkaClient[F[_]]:
-  def sendRequest(node: Node, request: KafkaRequest): F[F[request.RespT]]
-  def leastUsedNode: F[Node]
+  def sendRequest(nodeId: Int, request: KafkaRequest): F[F[request.RespT]]
+  def leastUsedNode: F[Int]
 
 object KafkaClient:
+
   def resource[F[_]: Async: Network](
+      metadata: Metadata[F],
       clientId: String,
       bootstrapServers: List[IpAddress],
       requestTimeout: FiniteDuration,
@@ -27,17 +31,19 @@ object KafkaClient:
       socketConnectionSetupTimeout: FiniteDuration,
       socketConnectionSetupTimeoutMax: FiniteDuration
   ): Resource[F, KafkaClient[F]] =
-    KeyedResultStream
-      .resource[F, Int, Int, RequestMessage, ResponseMessage]()
+    (
+      KeyedResultStream
+        .resource[F, Int, Int, RequestMessage, ResponseMessage](),
+    )
       .map { keyResStream =>
         new KafkaClient[F]:
-          def sendRequest(node: Node, request: KafkaRequest): F[F[request.RespT]] =
+          def sendRequest(nodeId: Int, request: KafkaRequest): F[F[request.RespT]] =
             val pipe: Pipe[F, RequestMessage, ResponseMessage] =
-              in => in.through(MessageSocket(Network[F], node.host, node.port))
+              in => in.through(MessageSocket(Network[F], host"test.com", port"8000")) //get info from metadata
 
             val reqMessage: RequestMessage = RequestMessage(0, 0, 0, None, request)
             keyResStream
-              .sendTo_(node.id, reqMessage, pipe)
+              .sendTo_(nodeId, reqMessage, pipe)
               .map(_.flatMap { resp =>
                 resp.correlationId match
                   case id if id == reqMessage.correlationId =>
@@ -46,5 +52,5 @@ object KafkaClient:
                     Async[F].raiseError[request.RespT](new Exception("wrong response type"))
               })
 
-          def leastUsedNode: F[Node] = ???
+          def leastUsedNode: F[Int] = ???
       }

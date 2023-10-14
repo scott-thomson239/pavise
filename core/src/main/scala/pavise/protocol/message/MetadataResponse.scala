@@ -15,8 +15,7 @@ case class MetadataResponse(
     controllerId: Int,
     topics: List[MetadataResponse.TopicMetadata],
     clusterAuthorizedOperations: Int
-) extends KafkaResponse:
-  val apiKey = 3
+) extends KafkaResponse
 
 object MetadataResponse:
 
