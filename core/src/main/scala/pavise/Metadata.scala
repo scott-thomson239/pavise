@@ -10,18 +10,23 @@ import pavise.protocol.message.*
 import cats.effect.kernel.Resource
 import cats.effect.kernel.Fiber
 import fs2.concurrent.SignallingRef
+import com.comcast.ip4s.SocketAddress
+import com.comcast.ip4s.Host
 
 trait Metadata[F[_]]:
   def currentLeader(topicPartition: TopicPartition): F[Int]
+  def allNodes: F[Map[Int, Node]]
 
 object Metadata:
 
   def resource[F[_]: Async](
+      bootstrapServers: List[SocketAddress[Host]],
       metadataMaxAge: FiniteDuration,
       metadataMaxIdle: FiniteDuration,
       clusterState: SignallingRef[F, ClusterState]
   ): Resource[F, Metadata[F]] =
-    backgroundUpdater(metadataMaxAge, clusterState).map { _ =>
+    (backgroundUpdater(metadataMaxAge, clusterState),
+      Resource.eval(clusterState.update(state => state.copy(cluster = state.cluster.copy(nodes = addressesToNodes(bootstrapServers)))))).mapN { (_, _) =>
       new Metadata[F]:
         def currentLeader(topicPartition: TopicPartition): F[Int] =
           clusterState.get.flatMap { state =>
@@ -30,7 +35,7 @@ object Metadata:
               .fold {
                 requestUpdateForTopics(clusterState, Set(topicPartition.topic)) *>
                   clusterState.waitUntil(
-                    _.cluster.partitionsByTopic.get(topicPartition.topic).nonEmpty
+                    !_.waitingTopics.contains(topicPartition.topic)
                   ) *>
                   clusterState.get.flatMap(
                     _.cluster.partitionByTopicPartition
@@ -40,7 +45,13 @@ object Metadata:
                   )
               }(_.leader.id.pure[F])
           }
+        def allNodes: F[Map[Int, Node]] =
+          clusterState.get.map(_.cluster.nodes)
     }
+
+  private def addressesToNodes(addrs: List[SocketAddress[Host]]): Map[Int, Node] = 
+    addrs.mapWithIndex((addr, i) => (-i, Node(-i, addr.host, addr.port))).toMap
+
   private def backgroundUpdater[F[_]: Async](
       metadataMaxAge: FiniteDuration,
       clusterState: SignallingRef[F, ClusterState]

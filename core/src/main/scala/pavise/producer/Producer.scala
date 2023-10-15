@@ -10,6 +10,8 @@ import pavise.Metadata
 import pavise.producer.internal.RecordBatcher
 import fs2.io.net.Network
 import pavise.*
+import com.comcast.ip4s.Host
+import com.comcast.ip4s.SocketAddress
 
 trait Producer[F[_], K, V]:
   def produce(record: ProducerRecord[K, V]): F[F[RecordMetadata]]
@@ -18,17 +20,16 @@ object Producer:
   def resource[F[_]: Async: Network, K, V](
       settings: ProducerSettings[F, K, V]
   ): Resource[F, Producer[F, K, V]] = for
-    bootstrapServers <- Resource.eval[F, List[IpAddress]](
+    bootstrapServers <- Resource.eval[F, List[SocketAddress[Host]]](
       settings.bootstrapServers
-        .traverse(addr => IpAddress.fromString(addr))
+        .traverse(addr => SocketAddress.fromString(addr))
         .liftTo[F](new Exception("bad addrs"))
     )
     clusterState <- Resource.eval(ClusterState[F])
-    metadata <- Metadata.resource(settings.metadataMaxAge, settings.metadataMaxIdle, clusterState)
+    metadata <- Metadata.resource(bootstrapServers, settings.metadataMaxAge, settings.metadataMaxIdle, clusterState)
     client <- KafkaClient.resource[F](
       metadata,
       settings.clientId,
-      bootstrapServers,
       settings.requestTimeout,
       settings.connectionsMaxIdle,
       settings.reconnectBackoff,

@@ -3,16 +3,15 @@ package pavise
 import cats.effect.kernel.Resource
 import scala.concurrent.duration.FiniteDuration
 import pavise.protocol.KafkaRequest
-import com.comcast.ip4s.IpAddress
 import cats.effect.kernel.Async
+import cats.effect.syntax.all.*
 import fs2.io.net.Network
 import pavise.protocol.KafkaResponse
 import fs2.*
 import cats.syntax.all.*
 import pavise.protocol.ResponseMessage
 import pavise.protocol.RequestMessage
-import cats.effect.std.MapRef
-import com.comcast.ip4s.*
+import cats.effect.kernel.Ref
 
 trait KafkaClient[F[_]]:
   def sendRequest(nodeId: Int, request: KafkaRequest): F[F[request.RespT]]
@@ -23,7 +22,6 @@ object KafkaClient:
   def resource[F[_]: Async: Network](
       metadata: Metadata[F],
       clientId: String,
-      bootstrapServers: List[IpAddress],
       requestTimeout: FiniteDuration,
       connectionsMaxIdle: FiniteDuration,
       reconnectBackoff: FiniteDuration,
@@ -34,23 +32,41 @@ object KafkaClient:
     (
       KeyedResultStream
         .resource[F, Int, Int, RequestMessage, ResponseMessage](),
+      Resource.eval(Ref.of(Map.empty[Int, NodeConnectionState]))
     )
-      .map { keyResStream =>
+      .mapN { (keyResStream, clusterConnectionState) =>
         new KafkaClient[F]:
           def sendRequest(nodeId: Int, request: KafkaRequest): F[F[request.RespT]] =
-            val pipe: Pipe[F, RequestMessage, ResponseMessage] =
-              in => in.through(MessageSocket(Network[F], host"test.com", port"8000")) //get info from metadata
+            metadata.allNodes
+              .flatMap(_.get(nodeId).liftTo[F](new Exception("node doesn't exist")))
+              .flatMap { node =>
+                val pipe: Pipe[F, RequestMessage, ResponseMessage] =
+                  in =>
+                    in.through(
+                      MessageSocket(Network[F], node.host, node.port)
+                    )
+                val reqMessage: RequestMessage = RequestMessage(0, 0, 0, None, request)
+                keyResStream
+                  .sendTo_(nodeId, reqMessage, pipe)
+                  .map(_.flatMap { resp =>
+                    resp.correlationId match
+                      case id if id == reqMessage.correlationId =>
+                        resp.response.asInstanceOf[request.RespT].pure[F]
+                      case _ =>
+                        Async[F].raiseError[request.RespT](new Exception("wrong response type"))
+                  })
+              }
 
-            val reqMessage: RequestMessage = RequestMessage(0, 0, 0, None, request)
-            keyResStream
-              .sendTo_(nodeId, reqMessage, pipe)
-              .map(_.flatMap { resp =>
-                resp.correlationId match
-                  case id if id == reqMessage.correlationId =>
-                    resp.response.asInstanceOf[request.RespT].pure[F]
-                  case _ =>
-                    Async[F].raiseError[request.RespT](new Exception("wrong response type"))
-              })
-
-          def leastUsedNode: F[Int] = ???
+          def leastUsedNode: F[Int] =
+            (metadata.allNodes, clusterConnectionState.get).flatMapN { (allNodes, connectedNodes) =>
+              val newNodes = allNodes.keySet.diff(connectedNodes.keySet)
+              newNodes.headOption.orElse {
+                connectedNodes.keySet.headOption
+              }.liftTo(new Exception("no nodes"))
+            }
       }
+
+  case class NodeConnectionState(state: ConnectionState)
+
+  enum ConnectionState:
+    case Disconnected, Connecting, CheckingApiVersions, Ready, AuthenticationFailure
