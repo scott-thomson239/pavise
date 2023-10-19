@@ -2,6 +2,8 @@ package pavise.protocol
 
 import scodec.codecs.*
 import scodec.*
+import pavise.protocol.message.ProduceRequest
+import pavise.protocol.message.MetadataRequest
 
 case class RequestMessage(
     apiKey: Int,
@@ -32,7 +34,12 @@ object KafkaRequest:
   val SASL_HANDSHAKE = 17
   val API_VERSIONS = 18
 
+  given codec(using ApiVersions): Codec[KafkaRequest] = 
+    discriminated[KafkaRequest].by(int16)
+      .typecase(PRODUCE, ProduceRequest.codec)
+      .typecase(METADATA, MetadataRequest.codec)
+
 object RequestMessage:
 
-  given codec: Codec[RequestMessage] = ???
-  // (int16 :: int16 :: int32 :: HelperCodecs.nullableString :: Codec[A]).as[RequestMessage[A]]
+  given codec(using ApiVersions): Codec[RequestMessage] =
+   (int16 :: int16 :: int32 :: HelperCodecs.nullableString :: Codec[KafkaRequest]).as[RequestMessage]

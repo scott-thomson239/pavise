@@ -11,6 +11,7 @@ import fs2.interop.scodec.StreamEncoder
 import scodec.*
 import fs2.interop.scodec.StreamDecoder
 import com.comcast.ip4s.SocketAddress
+import scodec.codecs.*
 
 object MessageSocket:
   def apply[F[_]: Async](
@@ -24,8 +25,12 @@ object MessageSocket:
         .concurrently(in.through(requestStreamEncoder.toPipeByte).through(socket.writes))
     }
 
-  val requestStreamEncoder: StreamEncoder[RequestMessage] =
-    StreamEncoder.once(Codec[RequestMessage])
+  val requestStreamEncoder: StreamEncoder[RequestMessage] = 
+    StreamEncoder.many(variableSizeBytes(int32, Codec[RequestMessage]))
 
   val responseStreamDecoder: StreamDecoder[ResponseMessage] =
-    StreamDecoder.once(Codec[ResponseMessage])
+    StreamDecoder
+      .many(int32)
+      .flatMap(nBytes =>
+        StreamDecoder.isolate(nBytes * 8)(StreamDecoder.many(Codec[ResponseMessage]))
+      )

@@ -7,7 +7,11 @@ case class ResponseMessage(correlationId: Int, response: KafkaResponse)
 
 trait KafkaResponse
 
+object KafkaResponse:
+
+  given codec(using ApiVersions): Codec[KafkaResponse] = ???
+
 object ResponseMessage:
 
-  given codec: Codec[ResponseMessage] = ???
-//    (int32 :: Codec[A]).as[ResponseMessage[A]]
+  given codec(using ApiVersions): Codec[ResponseMessage] = 
+    (int32 :: Codec[KafkaResponse]).as[ResponseMessage]

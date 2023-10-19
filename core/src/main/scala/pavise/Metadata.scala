@@ -25,8 +25,14 @@ object Metadata:
       metadataMaxIdle: FiniteDuration,
       clusterState: SignallingRef[F, ClusterState]
   ): Resource[F, Metadata[F]] =
-    (backgroundUpdater(metadataMaxAge, clusterState),
-      Resource.eval(clusterState.update(state => state.copy(cluster = state.cluster.copy(nodes = addressesToNodes(bootstrapServers)))))).mapN { (_, _) =>
+    (
+      backgroundUpdater(metadataMaxAge, clusterState),
+      Resource.eval(
+        clusterState.update(state =>
+          state.copy(cluster = state.cluster.copy(nodes = addressesToNodes(bootstrapServers)))
+        )
+      )
+    ).mapN { (_, _) =>
       new Metadata[F]:
         def currentLeader(topicPartition: TopicPartition): F[Int] =
           clusterState.get.flatMap { state =>
@@ -49,7 +55,7 @@ object Metadata:
           clusterState.get.map(_.cluster.nodes)
     }
 
-  private def addressesToNodes(addrs: List[SocketAddress[Host]]): Map[Int, Node] = 
+  private def addressesToNodes(addrs: List[SocketAddress[Host]]): Map[Int, Node] =
     addrs.mapWithIndex((addr, i) => (-i, Node(-i, addr.host, addr.port))).toMap
 
   private def backgroundUpdater[F[_]: Async](
