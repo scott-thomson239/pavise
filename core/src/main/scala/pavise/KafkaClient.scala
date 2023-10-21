@@ -6,7 +6,6 @@ import pavise.protocol.KafkaRequest
 import cats.effect.kernel.Async
 import cats.effect.syntax.all.*
 import fs2.io.net.Network
-import pavise.protocol.KafkaResponse
 import fs2.*
 import cats.syntax.all.*
 import pavise.protocol.ResponseMessage
@@ -49,11 +48,7 @@ object KafkaClient:
                 keyResStream
                   .sendTo_(nodeId, reqMessage, pipe)
                   .map(_.flatMap { resp =>
-                    resp.correlationId match
-                      case id if id == reqMessage.correlationId =>
-                        resp.response.asInstanceOf[request.RespT].pure[F]
-                      case _ =>
-                        Async[F].raiseError[request.RespT](new Exception("wrong response type"))
+                    resp.asInstanceOf[request.RespT].pure[F]
                   })
               }
 

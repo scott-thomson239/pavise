@@ -4,6 +4,9 @@ import scodec.codecs.*
 import scodec.*
 import pavise.protocol.message.ProduceRequest
 import pavise.protocol.message.MetadataRequest
+import scodec.bits.*
+import cats.syntax.all.*
+import cats.MonadThrow
 
 case class RequestMessage(
     apiKey: Int,
@@ -15,6 +18,7 @@ case class RequestMessage(
 
 trait KafkaRequest:
   type RespT
+  def parseCorrespondingResponse[F[_]: MonadThrow](resp: BitVector)(using ApiVersions): F[RespT]
 
 object KafkaRequest:
 

@@ -11,7 +11,9 @@ import scodec.Attempt
 import scodec.*
 import scodec.codecs.*
 import scodec.Attempt.*
-import scodec.bits.ByteVector
+import scodec.bits.*
+import cats.MonadThrow
+import cats.syntax.all.*
 
 case class ProduceRequest(
     transactionalId: Option[String],
@@ -20,6 +22,8 @@ case class ProduceRequest(
     topicData: List[ProduceRequest.TopicData]
 ) extends KafkaRequest:
   type RespT = ProduceResponse
+  def parseCorrespondingResponse[F[_]: MonadThrow](resp: BitVector)(using ApiVersions): F[RespT] =
+    ProduceResponse.codec.decodeValue(resp).toOption.liftTo(new Exception("failed parse"))
 
 object ProduceRequest:
 

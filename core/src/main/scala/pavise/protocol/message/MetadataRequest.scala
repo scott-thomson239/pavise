@@ -4,6 +4,9 @@ import scodec.Codec
 import pavise.protocol.KafkaRequest
 import scodec.codecs.*
 import pavise.protocol.ApiVersions
+import cats.MonadThrow
+import cats.syntax.all.*
+import scodec.bits.BitVector
 
 case class MetadataRequest(
     topics: List[String],
@@ -12,6 +15,8 @@ case class MetadataRequest(
     includeTopicAuthorizedOperations: Boolean
 ) extends KafkaRequest:
   type RespT = MetadataResponse
+  def parseCorrespondingResponse[F[_]: MonadThrow](resp: BitVector)(using ApiVersions): F[RespT] =
+    MetadataResponse.codec.decodeValue(resp).toOption.liftTo(new Exception("failed parse"))
 
 object MetadataRequest:
 
