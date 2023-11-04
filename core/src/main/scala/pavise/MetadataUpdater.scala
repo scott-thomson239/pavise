@@ -17,28 +17,29 @@ object MetadataUpdater:
     Stream
       .eval(Ref.of(Set.empty[String]))
       .flatMap { inProgress =>
-        clusterState.discrete.evalMap { state =>
-          inProgress.modify { curInProgress =>
-            if state.waitingTopics.diff(curInProgress).isEmpty then
-              (curInProgress, Set.empty[String])
-            else {
-              val union = curInProgress.union(state.waitingTopics)
-              (union, union)
+        clusterState.discrete
+          .evalMap { state =>
+            inProgress.modify { curInProgress =>
+              if state.waitingTopics.diff(curInProgress).isEmpty then
+                (curInProgress, Set.empty[String])
+              else
+                val union = curInProgress.union(state.waitingTopics)
+                (union, union)
             }
           }
-          }.evalMap { topics => 
+          .evalMap { topics =>
             val request = MetadataRequest(topics.toList, false, false, false)
-            sendMetadataRequest(client, request).flatMap { newCluster => 
-              clusterState.update { prevState => 
+            sendMetadataRequest(client, request).flatMap { newCluster =>
+              clusterState.update { prevState =>
                 ClusterState(topics.diff(prevState.waitingTopics), newCluster)
               }
             }
-        }
+          }
       }
       .spawn
       .compile
       .drain
-  
+
   private def sendMetadataRequest[F[_]: Async](
       client: KafkaClient[F],
       request: MetadataRequest

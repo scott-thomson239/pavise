@@ -67,6 +67,13 @@ object RecordBatcher:
       recordMetadata <- batchDef.get
     yield recordMetadata
 
+  private def createPartitionBatch(
+      records: ByteVector,
+      topicPartition: TopicPartition,
+      comp: CompressionType,
+      producerId: Long
+  ): RecordBatch = ???
+
   case class SenderFiber[F[_]](
       defQueue: Queue[F, Deferred[F, F[RecordMetadata]]],
       batchQueue: Queue[F, ByteVector],

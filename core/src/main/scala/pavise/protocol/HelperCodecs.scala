@@ -4,27 +4,30 @@ import scodec.*
 import scodec.codecs.*
 import scodec.Attempt.*
 import scodec.bits.*
-import scala.concurrent.duration.FiniteDuration
+import scala.concurrent.duration.*
 
-object HelperCodecs {
+object HelperCodecs:
 
-  // val MSB = hex"0x80"
-  // val LOW_7_BITS = hex"0x7f"
-  // val INT_REST_BYTES = hex"0xffffff80"
+  def array[A](inner: Codec[A]): Codec[List[A]] = listOfN(int32, inner)
 
-  // val codec: Codec[Int] = bytes.exmap(decode, encode)
+  val string: Codec[String] = variableSizeBytes(int16, utf8)
 
-  // private def decode(x: ByteVector): Attempt[Int] = ???
+  val ms: Codec[FiniteDuration] = int32.xmap(ms => ms.milliseconds, fd => fd.toMillis.toInt)
 
-  // private def encode(x: Int): Attempt[ByteVector] = ???
-  //
-  val ms: Codec[FiniteDuration] = ???
+  val optionalTimestamp: Codec[Option[FiniteDuration]] =
+    int64.xmap(
+      ms => if ms == -1 then None else Some(ms.milliseconds),
+      fd => fd.map(_.toMillis).getOrElse(-1)
+    )
 
-  val timestamp: Codec[FiniteDuration] = ???
+  val timestamp: Codec[FiniteDuration] = // maybe wrong
+    int64.xmap(ms => ms.milliseconds, fd => fd.toMillis)
 
-  val nullableString: Codec[Option[String]] = ???
+  val nullableString: Codec[Option[String]] =
+    int16.consume(len => conditional(len > -1, fixedSizeBytes(len, utf8)))(s =>
+      s.map(_.size).getOrElse(-1)
+    )
 
-  val varint: Codec[Int] = ???
+  val varint: Codec[Int] = vint
 
-  val varlong: Codec[Long] = ???
-}
+  val varlong: Codec[Long] = vlong

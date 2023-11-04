@@ -22,8 +22,6 @@ case class ProduceRequest(
     topicData: List[ProduceRequest.TopicData]
 ) extends KafkaRequest:
   type RespT = ProduceResponse
-  def parseCorrespondingResponse[F[_]: MonadThrow](resp: BitVector)(using ApiVersions): F[RespT] =
-    ProduceResponse.codec.decodeValue(resp).toOption.liftTo(new Exception("failed parse"))
 
 object ProduceRequest:
 
@@ -31,7 +29,7 @@ object ProduceRequest:
     apiVersions.syncGroup match
       case _ => // 8
         val partitionData = (int32 :: bytes).as[PartitionData]
-        val topicData = (utf8 :: list(partitionData)).as[TopicData]
+        val topicData = (utf8 :: listOfN(int32, partitionData)).as[TopicData]
         (HelperCodecs.nullableString :: acksCodec :: HelperCodecs.ms :: list(topicData))
           .as[ProduceRequest]
 

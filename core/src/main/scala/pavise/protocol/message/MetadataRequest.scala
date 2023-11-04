@@ -7,6 +7,7 @@ import pavise.protocol.ApiVersions
 import cats.MonadThrow
 import cats.syntax.all.*
 import scodec.bits.BitVector
+import pavise.protocol.HelperCodecs
 
 case class MetadataRequest(
     topics: List[String],
@@ -15,11 +16,9 @@ case class MetadataRequest(
     includeTopicAuthorizedOperations: Boolean
 ) extends KafkaRequest:
   type RespT = MetadataResponse
-  def parseCorrespondingResponse[F[_]: MonadThrow](resp: BitVector)(using ApiVersions): F[RespT] =
-    MetadataResponse.codec.decodeValue(resp).toOption.liftTo(new Exception("failed parse"))
 
 object MetadataRequest:
 
   given codec(using apiVersions: ApiVersions): Codec[MetadataRequest] =
     apiVersions.syncGroup match
-      case _ => (list(utf8) :: bool :: bool :: bool).as[MetadataRequest] // 8
+      case _ => (listOfN(int32, utf8) :: bool :: bool :: bool).as[MetadataRequest] // 8

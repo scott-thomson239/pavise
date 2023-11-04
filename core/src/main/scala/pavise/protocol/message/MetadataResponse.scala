@@ -23,13 +23,13 @@ object MetadataResponse:
     apiVersions.syncGroup match
       case _ => // 8
         val broker = (int32 :: utf8 :: int32 :: HelperCodecs.nullableString).as[Broker]
-        val partitionMetadata = (ErrorCode.codec :: int32 :: int32 :: int32 :: list(
+        val partitionMetadata = (ErrorCode.codec :: int32 :: int32 :: int32 :: listOfN(int32,
           int32
-        ) :: list(int32) :: list(int32)).as[PartitionMetadata]
+        ) :: listOfN(int32, int32) :: listOfN(int32, int32)).as[PartitionMetadata]
         val topicMetadata =
-          (ErrorCode.codec :: utf8 :: bool :: list(partitionMetadata) :: int32)
+          (ErrorCode.codec :: utf8 :: bool :: listOfN(int32, partitionMetadata) :: int32)
             .as[TopicMetadata]
-        (int32 :: list(broker) :: HelperCodecs.nullableString :: int32 :: list(
+        (int32 :: listOfN(int32, broker) :: HelperCodecs.nullableString :: int32 :: listOfN(int32,
           topicMetadata
         ) :: int32).as[MetadataResponse]
 

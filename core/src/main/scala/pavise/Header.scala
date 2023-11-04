@@ -1,3 +1,5 @@
 package pavise
 
-case class Header(key: String, value: Array[Byte])
+import scodec.bits.ByteVector
+
+case class Header(key: String, value: ByteVector)

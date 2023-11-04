@@ -17,7 +17,7 @@ object ApiVersionsResponse:
 
   given codec: Codec[ApiVersionsResponse] =
     val apikey = (int16 :: int16 :: int16).as[ApiKey]
-    (ErrorCode.codec :: list(apikey) :: HelperCodecs.ms).as[ApiVersionsResponse]
+    (ErrorCode.codec :: listOfN(int32, apikey) :: HelperCodecs.ms).as[ApiVersionsResponse]
 
   case class ApiKey(
       apiKey: Int,

@@ -20,11 +20,11 @@ object ProduceResponse:
       case _ => // 8
         val recordError = (int32 :: HelperCodecs.nullableString).as[RecordError]
         val partitionResponse =
-          (int32 :: ErrorCode.codec :: int64 :: HelperCodecs.timestamp :: int64 :: list(
+          (int32 :: ErrorCode.codec :: int64 :: HelperCodecs.optionalTimestamp :: int64 :: list(
             recordError
           ) :: HelperCodecs.nullableString).as[PartitionResponse]
-        val response = (utf8 :: list(partitionResponse)).as[Response]
-        (list(response) :: HelperCodecs.ms).as[ProduceResponse]
+        val response = (utf8 :: listOfN(int32, partitionResponse)).as[Response]
+        (listOfN(int32, response) :: HelperCodecs.ms).as[ProduceResponse]
 
   case class Response(
       name: String,
@@ -35,7 +35,7 @@ object ProduceResponse:
       index: Int,
       errorCode: ErrorCode,
       baseOffset: Long,
-      logAppendTimeMs: FiniteDuration,
+      logAppendTimeMs: Option[FiniteDuration],
       logStartOffset: Long,
       recordErrors: List[RecordError],
       errorMessage: Option[String]

@@ -18,7 +18,6 @@ case class RequestMessage(
 
 trait KafkaRequest:
   type RespT
-  def parseCorrespondingResponse[F[_]: MonadThrow](resp: BitVector)(using ApiVersions): F[RespT]
 
 object KafkaRequest:
 

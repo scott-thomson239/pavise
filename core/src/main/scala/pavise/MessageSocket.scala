@@ -24,15 +24,15 @@ object MessageSocket:
       sg: SocketGroup[F],
       host: Host,
       port: Port
-  ): Pipe[F, RequestMessage, KafkaResponse] =
+  ): Pipe[F, KafkaRequest, KafkaResponse] =
     in => // make sure can use "in" in two places correctly
       Stream.resource(sg.client(SocketAddress(host, port))).flatMap { socket =>
         val apiVersionsRequest = ApiVersionsRequest()
-        brokerStream(socket, Stream.emit[F, KafkaRequest](apiVersionsRequest))(using ApiVersions.empty)
-          .evalMap(resp => ApiVersions.fromResponse(resp.asInstanceOf[ApiVersionsResponse]))
+        brokerStream[F](socket, Stream.emit[F, KafkaRequest](apiVersionsRequest))(using Async[F], ApiVersions.empty)
+          .evalMap(resp => ApiVersions.fromApiVersionsResponse(resp.asInstanceOf[ApiVersionsResponse]))
           .head
           .flatMap { apiVersions =>
-            brokerStream(socket, in)(using apiVersions)
+            brokerStream(socket, in)(using Async[F], apiVersions)
           }
       }
 

@@ -11,6 +11,7 @@ import cats.syntax.all.*
 import pavise.protocol.ResponseMessage
 import pavise.protocol.RequestMessage
 import cats.effect.kernel.Ref
+import pavise.protocol.KafkaResponse
 
 trait KafkaClient[F[_]]:
   def sendRequest(nodeId: Int, request: KafkaRequest): F[F[request.RespT]]
@@ -30,7 +31,7 @@ object KafkaClient:
   ): Resource[F, KafkaClient[F]] =
     (
       KeyedResultStream
-        .resource[F, Int, Int, RequestMessage, ResponseMessage](),
+        .resource[F, Int, Int, KafkaRequest, KafkaResponse](),
       Resource.eval(Ref.of(Map.empty[Int, NodeConnectionState]))
     )
       .mapN { (keyResStream, clusterConnectionState) =>
@@ -39,14 +40,13 @@ object KafkaClient:
             metadata.allNodes
               .flatMap(_.get(nodeId).liftTo[F](new Exception("node doesn't exist")))
               .flatMap { node =>
-                val pipe: Pipe[F, RequestMessage, ResponseMessage] =
+                val pipe: Pipe[F, KafkaRequest, KafkaResponse] =
                   in =>
                     in.through(
                       MessageSocket(Network[F], node.host, node.port)
                     )
-                val reqMessage: RequestMessage = RequestMessage(0, 0, 0, None, request)
                 keyResStream
-                  .sendTo_(nodeId, reqMessage, pipe)
+                  .sendTo_(nodeId, request, pipe)
                   .map(_.flatMap { resp =>
                     resp.asInstanceOf[request.RespT].pure[F]
                   })
@@ -61,7 +61,7 @@ object KafkaClient:
             }
       }
 
-  case class NodeConnectionState(state: ConnectionState)
+  case class NodeConnectionState(state: ConnectionState) //put node in here and query here first before metadata
 
   enum ConnectionState:
     case Disconnected, Connecting, CheckingApiVersions, Ready, AuthenticationFailure
