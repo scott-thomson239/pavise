@@ -55,7 +55,7 @@ object Producer:
       settings.maxBlockTime,
       settings.bufferMemory,
       batchSender
-    )
+    )(Async[F], keySerializer, valueSerializer)
   yield new Producer[F, K, V]:
     def produce(record: ProducerRecord[K, V]): F[F[RecordMetadata]] =
       for // TODO: add option to fetch all cluster topics at once

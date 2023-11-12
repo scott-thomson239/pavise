@@ -27,7 +27,7 @@ import pavise.protocol.message.ProduceRequest.TopicData
 import pavise.protocol.message.ProduceRequest.PartitionData
 
 trait BatchSender[F[_]]:
-  def send(topicPartition: TopicPartition, batch: ByteVector): F[F[RecordMetadata]]
+  def send(topicPartition: TopicPartition, batch: RecordBatch): F[F[RecordMetadata]]
 
 object BatchSender:
   def resource[F[_]: Async](
@@ -39,13 +39,13 @@ object BatchSender:
       client: KafkaClient[F]
   ): Resource[F, BatchSender[F]] =
     KeyedResultStream
-      .resource[F, Int, TopicPartition, (TopicPartition, ByteVector), RecordMetadata]()
+      .resource[F, Int, TopicPartition, (TopicPartition, RecordBatch), RecordMetadata]()
       .map { keyResStream =>
         new BatchSender[F]:
-          def send(topicPartition: TopicPartition, batch: ByteVector): F[F[RecordMetadata]] =
+          def send(topicPartition: TopicPartition, batch: RecordBatch): F[F[RecordMetadata]] =
             metadata.currentLeader(topicPartition).flatMap { leaderId =>
               val pipe
-                  : Pipe[F, (TopicPartition, ByteVector), (TopicPartition, RecordMetadata)] =
+                  : Pipe[F, (TopicPartition, RecordBatch), (TopicPartition, RecordMetadata)] =
                 in =>
                   Stream
                     .eval(Semaphore[F](maxInFlight))

@@ -14,6 +14,7 @@ import scodec.Attempt.*
 import scodec.bits.*
 import cats.MonadThrow
 import cats.syntax.all.*
+import pavise.protocol.RecordBatch
 
 case class ProduceRequest(
     transactionalId: Option[String],
@@ -28,14 +29,14 @@ object ProduceRequest:
   given codec(using apiVersions: ApiVersions): Codec[ProduceRequest] =
     apiVersions.syncGroup match
       case _ => // 8
-        val partitionData = (int32 :: bytes).as[PartitionData]
+        val partitionData = (int32 :: RecordBatch.codec).as[PartitionData]
         val topicData = (utf8 :: listOfN(int32, partitionData)).as[TopicData]
         (HelperCodecs.nullableString :: acksCodec :: HelperCodecs.ms :: list(topicData))
           .as[ProduceRequest]
 
   case class TopicData(name: String, partitionData: List[PartitionData])
 
-  case class PartitionData(index: Int, records: ByteVector)
+  case class PartitionData(index: Int, records: RecordBatch)
 
   val acksCodec: Codec[Acks] = uint16.exmap(fromRaw, toRaw)
 

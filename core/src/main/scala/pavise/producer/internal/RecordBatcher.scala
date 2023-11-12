@@ -12,6 +12,9 @@ import cats.effect.kernel.Deferred
 import cats.effect.kernel.Fiber
 import cats.effect.std.Queue
 import cats.effect.kernel.Async
+import pavise.protocol.Record
+import pavise.protocol.RecordBatch
+import scala.concurrent.duration.*
 
 trait RecordBatcher[F[_], K, V]:
   def batch(producerRecord: ProducerRecord[K, V], partition: Int): F[F[RecordMetadata]]
@@ -24,29 +27,42 @@ object RecordBatcher:
       maxBlockTime: FiniteDuration,
       bufferMemory: Int,
       batchSender: BatchSender[F]
+  )(using
+      keySerializer: KeySerializer[F, K],
+      valueSerializer: ValueSerializer[F, V]
   ): Resource[F, RecordBatcher[F, K, V]] = for
     recordBatchMap <- Resource.eval(
-      MapRef.inConcurrentHashMap[F, F, TopicPartition, ByteVector]()
+      MapRef.inConcurrentHashMap[F, F, TopicPartition, (List[Record], Long)]()
     )
     senderMap <- Resource.eval(
       MapRef.inConcurrentHashMap[F, F, TopicPartition, SenderFiber[F]]()
     )
   yield new RecordBatcher[F, K, V]:
     def batch(producerRecord: ProducerRecord[K, V], partition: Int): F[F[RecordMetadata]] = for
-      recordBytes <- ByteVector.empty.pure[F] ////////////////////////////////////////////////////////
+      valueBytes <- valueSerializer.serialize(
+        producerRecord.topic,
+        producerRecord.headers,
+        producerRecord.value
+      )
+      keyBytes <- keySerializer.serialize(
+        producerRecord.topic,
+        producerRecord.headers,
+        producerRecord.key
+      )
+      record = createRecord(valueBytes, keyBytes, producerRecord.headers)
       topicPartition = TopicPartition(producerRecord.topic, partition)
       curBatch <- recordBatchMap(topicPartition).getAndUpdate {
-        case Some(curBatch) if recordBytes.size + curBatch.size <= batchSize =>
-          Some(curBatch ++ recordBytes)
+        case Some((curBatch, curSize)) if valueBytes.size + curSize <= batchSize =>
+          Some(record :: curBatch, curSize + valueBytes.size)
         case _ =>
-          Some(recordBytes.bufferBy(batchSize))
+          Some((List.empty[Record], 0))
       }
       batchDef <- curBatch match
-        case Some(batch) =>
+        case Some((batch, size)) =>
           for
             sender <- senderMap(topicPartition).get.map(_.get) ////////////
             _ <-
-              if batch.size + recordBytes.size > batchSize then sender.batchQueue.offer(batch)
+              if size + valueBytes.size > batchSize then sender.batchQueue.offer(batch)
               else Async[F].unit
             d <- sender.defQueue.take
             _ <- sender.defQueue.offer(d) ///////////////////////
@@ -58,6 +74,7 @@ object RecordBatcher:
               linger,
               topicPartition,
               batchSender,
+              compressionType,
               recordBatchMap
             )
             newDef <- Deferred[F, F[RecordMetadata]]
@@ -67,16 +84,40 @@ object RecordBatcher:
       recordMetadata <- batchDef.get
     yield recordMetadata
 
+  private def createRecord(key: ByteVector, value: ByteVector, headers: List[Header]): Record =
+    Record(0, 0.seconds, 0, key, value, headers)
+
   private def createPartitionBatch(
-      records: ByteVector,
+      records: List[Record],
       topicPartition: TopicPartition,
       comp: CompressionType,
       producerId: Long
-  ): RecordBatch = ???
+  ): RecordBatch =
+    RecordBatch(
+      0,
+      0,
+      0,
+      0,
+      0,
+      RecordBatch.Attributes(
+        comp,
+        false,
+        false,
+        false,
+        false
+      ),
+      0,
+      0.seconds,
+      0.seconds,
+      0,
+      0,
+      0,
+      records
+    )
 
   case class SenderFiber[F[_]](
       defQueue: Queue[F, Deferred[F, F[RecordMetadata]]],
-      batchQueue: Queue[F, ByteVector],
+      batchQueue: Queue[F, List[Record]],
       senderFiber: Fiber[F, Throwable, Unit]
   )
 
@@ -86,18 +127,20 @@ object RecordBatcher:
         linger: FiniteDuration,
         topicPartition: TopicPartition,
         batchSender: BatchSender[F],
-        batchMap: MapRef[F, TopicPartition, Option[ByteVector]]
+        compressionType: CompressionType,
+        batchMap: MapRef[F, TopicPartition, Option[(List[Record], Long)]]
     ): F[SenderFiber[F]] = for
       defQueue <- Queue.synchronous[F, Deferred[F, F[RecordMetadata]]]
-      batchQueue <- Queue.synchronous[F, ByteVector]
-      takeIncomplete = batchMap(topicPartition).getAndSet(None)
+      batchQueue <- Queue.synchronous[F, List[Record]]
+      takeIncomplete = batchMap(topicPartition).getAndSet(None).map(_._1F)
       senderFiber <- batchQueue.take
         .map(a => Some(a))
         .timeoutTo(linger, takeIncomplete)
         .flatMap { batchOpt =>
           batchOpt.traverse_ { batch =>
+            val recordBatch = createPartitionBatch(batch, topicPartition, compressionType, 0)
             defQueue.take.flatMap { produceRes =>
-              batchSender.send(topicPartition, batch).flatMap { metadataF =>
+              batchSender.send(topicPartition, recordBatch).flatMap { metadataF =>
                 produceRes.complete(metadataF)
               }
             }
