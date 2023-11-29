@@ -65,7 +65,6 @@ object RecordBatch {
 }
 
 case class Record(
-    length: Int,
     timestampDelta: FiniteDuration,
     offsetDelta: Int,
     key: ByteVector,
@@ -83,7 +82,6 @@ object Record {
       headers: List[Header]
   ): Record =
     Record(
-      0,
       timestampDelta,
       offsetDelta,
       key,
@@ -92,7 +90,7 @@ object Record {
     )
 
   val codec: Codec[Record] =
-    (HelperCodecs.varint :: HelperCodecs.ms :: HelperCodecs.varint :: variableSizeBytes(
+    variableSizeBytes(HelperCodecs.varint, (HelperCodecs.ms :: HelperCodecs.varint :: variableSizeBytes(
       HelperCodecs.varint,
       bytes
     ) :: variableSizeBytes(HelperCodecs.varint, bytes) :: variableSizeBytes(
@@ -100,7 +98,7 @@ object Record {
       list(
         headerCodec
       )
-    )).as[Record]
+    )).as[Record])
 
   val headerCodec: Codec[Header] =
     (variableSizeBytes(HelperCodecs.varint, utf8) :: variableSizeBytes(

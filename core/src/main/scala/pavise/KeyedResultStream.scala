@@ -16,13 +16,13 @@ trait KeyedResultStream[F[_], K, I, V, O]:
 
 object KeyedResultStream:
 
-  extension[F[_], K, V, O] (s: KeyedResultStream[F, K, K, V, O])
+  extension [F[_], K, V, O](s: KeyedResultStream[F, K, K, V, O])
     def sendTo_(key: K, value: V, pipe: Pipe[F, V, O]): F[F[O]] =
       s.sendTo(key, key, value, pipe.andThen(s => s.map(out => (key, out))))
-  
+
   def resource[F[_]: Async, K, I, V, O](): Resource[F, KeyedResultStream[F, K, I, V, O]] = (
     Resource.eval(MapRef.inConcurrentHashMap[F, F, K, ResultStream[F, I, V, O]]()),
-    Supervisor[F](await = true) // maybe not needed with stream.spawn?
+    Supervisor[F](await = true)
   ).mapN { (chMap, supervisor) =>
     new KeyedResultStream[F, K, I, V, O]:
       def sendTo(key: K, id: I, value: V, pipe: Pipe[F, V, (I, O)]): F[F[O]] = for
@@ -44,7 +44,7 @@ object KeyedResultStream:
             }
             .getOrElse((newResStream.some, None))
         }
-        X <- resStreamOpt.fold(
+        (ch, defQueue) <- resStreamOpt.fold(
           supervisor
             .supervise(
               newCh.stream
@@ -63,12 +63,12 @@ object KeyedResultStream:
                 .drain
             )
             .as((newCh, newDefQueue))
-          )(a => a.pure[F])
+        )(a => a.pure[F])
         newDef <- Deferred[F, O]
-        _ <- X._2.offer(newDef)
-        _ <- X._1.send(value)
+        _ <- defQueue.offer(newDef)
+        _ <- ch.send(value)
       yield newDef.get
-    
+
   }
 
   case class ResultStream[F[_], I, V, O](

@@ -31,11 +31,11 @@ lazy val core = crossProject(JVMPlatform, JSPlatform, NativePlatform)
       "co.fs2" %%% "fs2-core" % "3.7.0",
       "co.fs2" %%% "fs2-io" % "3.7.0",
       "co.fs2" %%% "fs2-scodec" % "3.7.0",
-      "org.scodec" %%% "scodec-core" % "2.2.1"
-      //"org.scalameta" %%% "munit" % "0.7.29" % Test,
-      //"org.typelevel" %%% "munit-cats-effect-3" % "1.0.7" % Test
+      "org.scodec" %%% "scodec-core" % "2.2.1",
+      "org.scalameta" %%% "munit" % "1.0.0-M10" % Test,
+      "org.typelevel" %%% "munit-cats-effect" % "2.0.0-M4" % Test
     ),
-    scalacOptions += "-Wunused:all"
+    scalacOptions ++= List("-Wunused:all", "-source:future")
   )
 
 lazy val docs = project.in(file("site")).enablePlugins(TypelevelSitePlugin)

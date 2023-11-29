@@ -85,16 +85,16 @@ object RecordBatcher:
     yield recordMetadata
 
   private def createRecord(key: ByteVector, value: ByteVector, headers: List[Header]): Record =
-    Record(0, 0.seconds, 0, key, value, headers)
+    Record(0.seconds, -1, key, value, headers)
 
-  private def createPartitionBatch(
+  private def createPartitionBatch( // TODO: fill in placeholders
       records: List[Record],
       topicPartition: TopicPartition,
       comp: CompressionType,
       producerId: Long
   ): RecordBatch =
     RecordBatch(
-      0,
+      -1,
       0,
       0,
       0,

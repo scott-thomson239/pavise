@@ -60,7 +60,7 @@ object BatchSender:
                               }
                               TopicData(topic, partData)
                             }
-                            .toList // probably slow, fix later
+                            .toList // TODO: probably slow, fix later
                           ProduceRequest(None, Acks.All, deliveryTimeout, topicData)
                         }
                         .evalMap(req => sem.acquire *> client.sendRequest(leaderId, req))

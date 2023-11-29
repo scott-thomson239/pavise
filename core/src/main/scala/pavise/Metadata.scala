@@ -5,7 +5,7 @@ import cats.syntax.all.*
 import cats.effect.syntax.all.*
 import fs2.*
 import cats.effect.kernel.Ref
-import cats.effect.kernel.Async
+import cats.effect.kernel.Temporal
 import pavise.protocol.message.*
 import cats.effect.kernel.Resource
 import cats.effect.kernel.Fiber
@@ -19,7 +19,7 @@ trait Metadata[F[_]]:
 
 object Metadata:
 
-  def resource[F[_]: Async](
+  def resource[F[_]: Temporal](
       bootstrapServers: List[SocketAddress[Host]],
       metadataMaxAge: FiniteDuration,
       metadataMaxIdle: FiniteDuration,
@@ -58,11 +58,11 @@ object Metadata:
   private def addressesToNodes(addrs: List[SocketAddress[Host]]): Map[Int, Node] =
     addrs.mapWithIndex((addr, i) => (-i, Node(-i, addr.host, addr.port))).toMap
 
-  private def backgroundUpdater[F[_]: Async](
+  private def backgroundUpdater[F[_]: Temporal](
       metadataMaxAge: FiniteDuration,
       clusterState: SignallingRef[F, ClusterState]
   ): Resource[F, Fiber[F, Throwable, Nothing]] = Resource.make {
-    Async[F].sleep(metadataMaxAge) *> clusterState.get
+    Temporal[F].sleep(metadataMaxAge) *> clusterState.get
       .flatMap { state =>
         requestUpdateForTopics(clusterState, state.cluster.partitionsByTopic.keySet)
       }

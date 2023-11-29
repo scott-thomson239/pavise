@@ -17,12 +17,12 @@ trait KafkaResponse
 
 object KafkaResponse:
 
-  def decodeFromApiKey[F[_]: Async](apiKey: Int, raw: BitVector)(using
+  def decodeFromApiKey[F[_]: MonadThrow](apiKey: Int, raw: BitVector)(using
       ApiVersions
   ): F[KafkaResponse] = apiKey match
     case PRODUCE => ProduceResponse.codec.decodeValue(raw).toOption.liftTo(new Exception("sdfdf"))
     case METADATA => MetadataResponse.codec.decodeValue(raw).toOption.liftTo(new Exception("sfdsf"))
-    case _ => Async[F].raiseError(new Exception("wrong apikey"))
+    case _ => MonadThrow[F].raiseError(new Exception("wrong apikey"))
 
   // def codec(apiKey: Int)(using ApiVersions): Codec[KafkaResponse] = apiKey match {
   //   case PRODUCE => ProduceResponse.codec
