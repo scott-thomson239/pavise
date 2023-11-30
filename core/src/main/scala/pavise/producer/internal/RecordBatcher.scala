@@ -60,12 +60,12 @@ object RecordBatcher:
       batchDef <- curBatch match
         case Some((batch, size)) =>
           for
-            sender <- senderMap(topicPartition).get.map(_.get) ////////////
+            sender <- senderMap(topicPartition).get.map(_.get)
             _ <-
               if size + valueBytes.size > batchSize then sender.batchQueue.offer(batch)
               else Async[F].unit
             d <- sender.defQueue.take
-            _ <- sender.defQueue.offer(d) ///////////////////////
+            _ <- sender.defQueue.offer(d) 
           yield d
         case None =>
           for
