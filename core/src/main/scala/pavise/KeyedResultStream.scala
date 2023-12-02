@@ -15,7 +15,7 @@ import cats.effect.kernel.Ref
 trait KeyedResultStream[F[_], K, I, V, O]:
   def sendTo(key: K, id: I, value: V, pipe: Pipe[F, V, (I, O)]): F[F[O]]
 
-object KeyedResultStream:
+object KeyedResultStream: //TODO: need a way to handle timed out nodes/partitions
 
   extension [F[_], K, V, O](s: KeyedResultStream[F, K, K, V, O])
     def sendTo_(key: K, value: V, pipe: Pipe[F, V, O]): F[F[O]] =
