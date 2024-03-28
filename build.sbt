@@ -27,7 +27,8 @@ lazy val core = crossProject(JVMPlatform, JSPlatform, NativePlatform)
     name := "pavise",
     libraryDependencies ++= Seq(
       "org.typelevel" %%% "cats-core" % "2.9.0",
-      "org.typelevel" %%% "cats-effect" % "3.5.1",
+      "org.typelevel" %%% "cats-effect" % "3.5.4",
+      "org.typelevel" %%% "cats-effect-testkit" % "3.5.4" % Test,
       "co.fs2" %%% "fs2-core" % "3.7.0",
       "co.fs2" %%% "fs2-io" % "3.7.0",
       "co.fs2" %%% "fs2-scodec" % "3.7.0",

@@ -22,7 +22,7 @@ object Metadata:
   def resource[F[_]: Temporal](
       bootstrapServers: List[SocketAddress[Host]],
       metadataMaxAge: FiniteDuration,
-      metadataMaxIdle: FiniteDuration,
+      metadataMaxIdle: FiniteDuration,/////// might need producer specific metadata
       clusterState: SignallingRef[F, ClusterState]
   ): Resource[F, Metadata[F]] =
     (
@@ -42,7 +42,7 @@ object Metadata:
                 requestUpdateForTopics(clusterState, Set(topicPartition.topic)) *>
                   clusterState.waitUntil(
                     !_.waitingTopics.contains(topicPartition.topic)
-                  ) *>
+                  ).timeout(metadataMaxAge) *> ///////
                   clusterState.get.flatMap(
                     _.cluster.partitionByTopicPartition
                       .get(topicPartition)
