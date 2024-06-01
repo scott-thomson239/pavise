@@ -28,8 +28,8 @@ object RecordBatcher:
       bufferMemory: Int,
       batchSender: BatchSender[F]
   )(using
-      keySerializer: KeySerializer[F, K],
-      valueSerializer: ValueSerializer[F, V]
+      keySerializer: Serializer[F, K],
+      valueSerializer: Serializer[F, V]
   ): Resource[F, RecordBatcher[F, K, V]] = for
     recordBatchMap <- Resource.eval(
       MapRef.inConcurrentHashMap[F, F, TopicPartition, (List[Record], Long)]()
@@ -65,7 +65,7 @@ object RecordBatcher:
               if size + valueBytes.size > batchSize then sender.batchQueue.offer(batch)
               else Async[F].unit
             d <- sender.defQueue.take
-            _ <- sender.defQueue.offer(d) 
+            _ <- sender.defQueue.offer(d)
           yield d
         case None =>
           for

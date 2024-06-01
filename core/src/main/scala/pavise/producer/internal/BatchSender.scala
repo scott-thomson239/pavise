@@ -68,7 +68,16 @@ object BatchSender:
                         .flatMap { resp =>
                           Stream.emits(resp.responses.flatMap { r =>
                             r.partitionResponses.map { pr =>
-                              (TopicPartition(r.name, pr.index), RecordMetadata())
+                              (
+                                TopicPartition(r.name, pr.index),
+                                RecordMetadata(
+                                  0,
+                                  0.seconds,
+                                  0,
+                                  0,
+                                  TopicPartition(r.name, pr.index)
+                                )
+                              )
                             }
                           })
                         }
