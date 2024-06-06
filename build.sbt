@@ -20,7 +20,7 @@ ThisBuild / scalaVersion := "3.3.0"
 
 lazy val root = tlCrossRootProject.aggregate(core)
 
-lazy val core = crossProject(JVMPlatform)
+lazy val core = crossProject(JVMPlatform, JSPlatform, NativePlatform)
   .crossType(CrossType.Pure)
   .in(file("core"))
   .settings(
