@@ -51,56 +51,64 @@ class MetadataSuite extends CatsEffectSuite:
       val expectedNodeId1 = 0
       val expectedNodeId2 = 1
       metadata.currentLeader(TopicPartition("test1", 0)).assertEquals(expectedNodeId1) *>
-      metadata.currentLeader(TopicPartition("test1", 1)).assertEquals(expectedNodeId2)
+        metadata.currentLeader(TopicPartition("test1", 1)).assertEquals(expectedNodeId2)
     }
   }
 
   test(
     "currentLeader will timeout after waiting for leader node of absent topic for maxBlockTime"
   ) {
-    TestControl.execute {
-      metadataResource(10.seconds, 99.seconds).use { (clusterSig, metadata) =>
-        metadata.currentLeader(TopicPartition("missingTopic", 99))
+    TestControl
+      .execute {
+        metadataResource(10.seconds, 99.seconds).use { (clusterSig, metadata) =>
+          metadata.currentLeader(TopicPartition("missingTopic", 99))
+        }
       }
-    }.flatMap { control =>
-      for {
-        _ <- control.results.assertEquals(None)
-        _ <- control.tickAll
-        _ <- control.results.assertEquals(Outcome.Errored(new Exception("timeout")))
-      } yield ()
-      
-    }
+      .flatMap { control =>
+        for
+          _ <- control.results.assertEquals(None)
+          _ <- control.tickAll
+          _ <- control.results.assertEquals(Outcome.Errored(new Exception("timeout")))
+        yield ()
+
+      }
   }
 
   test("allNodes fetches a map of the current nodes that exist within metadata") {
-    metadataResource(10.seconds, 99.seconds).use { (clusterSig, metadata) => 
-      metadata.allNodes.assertEquals(Map(
-        0 -> Node(0, host"localhost", port"5555"),
-        1 -> Node(1, host"localhost", port"5555")
-      ))
+    metadataResource(10.seconds, 99.seconds).use { (clusterSig, metadata) =>
+      metadata.allNodes.assertEquals(
+        Map(
+          0 -> Node(0, host"localhost", port"5555"),
+          1 -> Node(1, host"localhost", port"5555")
+        )
+      )
     }
   }
 
   test("metadata will be refreshed after metadataMaxAge seconds") {
-    TestControl.execute {
-      metadataResource(10.seconds, 99.seconds).use { (clusterSig, _) => 
-        clusterSig.waitUntil(c => c.waitingTopics.contains("test1"))
+    TestControl
+      .execute {
+        metadataResource(10.seconds, 99.seconds).use { (clusterSig, _) =>
+          clusterSig.waitUntil(c => c.waitingTopics.contains("test1"))
+        }
       }
-    }.flatMap { control => 
-      for {
-        _ <- control.results.assertEquals(None)
-        _ <- control.tick
-        _ <- control.results.assertEquals(Outcome.Succeeded(IO(true)))
-      } yield ()
-    }
+      .flatMap { control =>
+        for
+          _ <- control.results.assertEquals(None)
+          _ <- control.tick
+          _ <- control.results.assertEquals(Outcome.Succeeded(IO(true)))
+        yield ()
+      }
   }
 
   test(
     "metadata for a topic that has not called currentLeader will be deleted after metadataMaxIdle seconds"
   ) {
-    TestControl.executeEmbed {
-      metadataResource(10.seconds, 99.seconds).use { (clusterSig, _) => 
-        IO.sleep(99.seconds) *> clusterSig.get.map(_.cluster.partitionsByTopic.get("test1"))
+    TestControl
+      .executeEmbed {
+        metadataResource(10.seconds, 99.seconds).use { (clusterSig, _) =>
+          IO.sleep(99.seconds) *> clusterSig.get.map(_.cluster.partitionsByTopic.get("test1"))
+        }
       }
-    }.assertEquals(None)
+      .assertEquals(None)
   }

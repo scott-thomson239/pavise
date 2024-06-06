@@ -15,7 +15,7 @@ import cats.effect.kernel.Ref
 trait KeyedResultStream[F[_], K, I, V, O]:
   def sendTo(key: K, id: I, value: V, pipe: Pipe[F, V, (I, O)]): F[F[O]]
 
-object KeyedResultStream: //TODO: need a way to handle timed out nodes/partitions
+object KeyedResultStream: // TODO: need a way to handle timed out nodes/partitions
 
   extension [F[_], K, V, O](s: KeyedResultStream[F, K, K, V, O])
     def sendTo_(key: K, value: V, pipe: Pipe[F, V, O]): F[F[O]] =
@@ -23,15 +23,16 @@ object KeyedResultStream: //TODO: need a way to handle timed out nodes/partition
 
   def resource[F[_]: Async, K, I, V, O](): Resource[F, KeyedResultStream[F, K, I, V, O]] = (
     Resource.eval(MapRef.inConcurrentHashMap[F, F, K, ResultStream[F, I, V, O]]()),
-    Supervisor[F](await = true)
+    Supervisor[F](await = false)
   ).mapN { (rStreamMap, supervisor) =>
     new KeyedResultStream[F, K, I, V, O]:
-      def sendTo(key: K, id: I, value: V, pipe: Pipe[F, V, (I, O)]): F[F[O]] = for
-        (ch, defQueue) <- getOrCreateResStream(id, supervisor, rStreamMap(key), pipe)
-        newDef <- Deferred[F, O]
-        _ <- defQueue.offer(newDef)
-        _ <- ch.send(value)
-      yield newDef.get
+      def sendTo(key: K, id: I, value: V, pipe: Pipe[F, V, (I, O)]): F[F[O]] =
+        for
+          (ch, defQueue) <- getOrCreateResStream(id, supervisor, rStreamMap(key), pipe)
+          newDef <- Deferred[F, O]
+          _ <- defQueue.offer(newDef)
+          _ <- ch.send(value)
+        yield newDef.get
   }
 
   def getOrCreateResStream[F[_]: Async, I, V, O](
@@ -40,53 +41,60 @@ object KeyedResultStream: //TODO: need a way to handle timed out nodes/partition
       rStreamRef: Ref[F, Option[ResultStream[F, I, V, O]]],
       pipe: Pipe[F, V, (I, O)]
   ): F[(Channel[F, V], Queue[F, Deferred[F, O]])] =
-    (Channel.unbounded[F, V], Queue.unbounded[F, Deferred[F, O]]).flatMapN { (newCh, newDefQueue) =>
-      val newResStream = ResultStream(newCh, Map(id -> newDefQueue))
-      rStreamRef
-        .modify { rStreamOpt =>
-          rStreamOpt
-            .map { rStream =>
-              rStream.defMap
-                .get(id)
-                .map(defQueue => (rStream.some, (rStream.ch, defQueue).some))
-                .getOrElse(
-                  (
-                    rStream.copy(defMap = rStream.defMap.updated(id, newDefQueue)).some,
-                    (rStream.ch, newDefQueue).some
+    (Channel.unbounded[F, V], Queue.unbounded[F, Deferred[F, O]]).flatMapN {
+      (newCh, newDefQueue) =>
+        val newResStream = ResultStream(newCh, Map(id -> newDefQueue))
+        rStreamRef
+          .modify { rStreamOpt =>
+            rStreamOpt
+              .map { rStream =>
+                rStream.defMap
+                  .get(id)
+                  .map(defQueue => (rStream.some, (rStream.ch, defQueue).some))
+                  .getOrElse(
+                    (
+                      rStream.copy(defMap = rStream.defMap.updated(id, newDefQueue)).some,
+                      (rStream.ch, newDefQueue).some
+                    )
                   )
-                )
-            }
-            .getOrElse((newResStream.some, None))
-        }
-        .flatMap(
-          _.fold(
-            initResStream(newResStream, newDefQueue, supervisor, pipe).as((newCh, newDefQueue))
-          )(_.pure[F])
-        )
+              }
+              .getOrElse((newResStream.some, None))
+          }
+          .flatMap(
+            _.fold(
+              initResStream(newCh, rStreamRef, supervisor, pipe)
+                .as((newCh, newDefQueue))
+            )(_.pure[F])
+          )
     }
 
   def initResStream[F[_]: Async, I, V, O](
-      resStream: ResultStream[F, I, V, O],
-      defQueue: Queue[F, Deferred[F, O]],
+      ch: Channel[F, V],
+      resStreamRef: Ref[F, Option[ResultStream[F, I, V, O]]],
       supervisor: Supervisor[F],
       pipe: Pipe[F, V, (I, O)]
   ): F[Unit] =
-    supervisor.supervise(
-      resStream.ch.stream
-        .through(pipe)
-        .evalMap { case (id, res) =>
-          resStream.defMap
-            .get(id)
-            .flatTraverse(_.tryTake)
-            .flatMap { defOpt =>
-              defOpt
-                .liftTo[F](new Exception("out of order elements"))
-                .flatMap(_.complete(res))
+    supervisor
+      .supervise(
+        ch.stream
+          .through(pipe)
+          .evalMap { case (id, res) =>
+            resStreamRef.get.flatMap { resStream =>
+              resStream
+                .flatMap(_.defMap.get(id))
+                .traverse(_.take)
+                .flatMap { defOpt =>
+                  defOpt
+                    .liftTo[F](new Exception("out of order elements"))
+                    .flatMap(_.complete(res))
+                }
+
             }
-        }
-        .compile
-        .drain
-    ).void
+          }
+          .compile
+          .drain
+      )
+      .void
 
   case class ResultStream[F[_], I, V, O](
       ch: Channel[F, V],
